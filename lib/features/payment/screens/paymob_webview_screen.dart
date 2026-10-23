@@ -3,14 +3,9 @@ import 'package:payment_with_paymob/features/payment/services/paymob_service.dar
 import 'package:webview_flutter/webview_flutter.dart';
 
 class PaymobWebViewScreen extends StatefulWidget {
-  const PaymobWebViewScreen({
-    super.key,
-    required this.service,
-    required this.clientSecret,
-  });
+  const PaymobWebViewScreen({super.key, required this.checkoutUri});
 
-  final PaymobService service;
-  final String clientSecret;
+  final Uri checkoutUri;
 
   @override
   State<PaymobWebViewScreen> createState() => _PaymobWebViewScreenState();
@@ -24,23 +19,24 @@ class _PaymobWebViewScreenState extends State<PaymobWebViewScreen> {
   void initState() {
     super.initState();
     _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)// to allow the payment page to work properly
       ..setNavigationDelegate(
         NavigationDelegate(
           // Watch every URL change to detect when Paymob redirects back to our app.
           onUrlChange: (change) => _checkUrl(change.url),
         ),
       )
-      ..loadRequest(widget.service.checkoutUri(widget.clientSecret));
+      ..loadRequest(widget.checkoutUri);
   }
 
-  // If the URL is our redirection URL, close the screen and return the result.
+  // If the URL is our redirection URL, close the screen and return that URL.
   void _checkUrl(String? url) {
     if (url == null || _finished) return;
-    final result = widget.service.resultFromUrl(url);
-    if (result == null) return;
+    //https://example.com/payment-result?success=true&pending=false&id=123456
+    //the user has completed the payment and Paymob is redirecting back to our app
+    if (!url.startsWith(PaymobService.redirectionUrl)) return; 
     _finished = true;
-    Navigator.pop(context, result);
+    Navigator.pop(context, url);
   }
 
   @override

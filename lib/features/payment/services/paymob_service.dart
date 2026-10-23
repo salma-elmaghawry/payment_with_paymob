@@ -16,6 +16,8 @@ import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 /// 2. [checkoutUri]     → payment page link (the WebView opens it)
 ///            ↓
 /// 3. [resultFromUrl]   → PaymentResult (the screen shows it to the user)
+///
+/// [pay] runs all 3 steps in this order.
 class PaymobService {
   PaymobService() {
     if (kDebugMode) _dio.interceptors.add(PrettyDioLogger(requestBody: true));
@@ -23,7 +25,7 @@ class PaymobService {
 
   static const String _baseUrl = 'https://accept.paymob.com';
   static const String _checkoutUrl = 'https://eg.checkout.paymob.com/';
-  static const String _redirectionUrl = 'https://example.com/payment-result';
+  static const String redirectionUrl = 'https://example.com/payment-result';
 
   static String get _secretKey => dotenv.get('PAYMOB_SECRET_KEY');
   static String get _publicKey => dotenv.get('PAYMOB_PUBLIC_KEY');
@@ -63,7 +65,7 @@ class PaymobService {
           ],
           'billing_data': billingData.toJson(),
           'special_reference': 'order_${DateTime.now().millisecondsSinceEpoch}',
-          'redirection_url': _redirectionUrl,
+          'redirection_url': redirectionUrl,
         },
       );
       return IntentionResponse.fromJson(response.data!);
@@ -76,15 +78,16 @@ class PaymobService {
   }
 
   /// Step 2: Build the payment page link.
+  /// 
 
-  Uri checkoutUri(String clientSecret) => Uri.parse(_checkoutUrl).replace(
-    queryParameters: {'publicKey': _publicKey, 'clientSecret': clientSecret},
+  Uri checkoutUri(String clientSecret) => Uri.parse(
+    '$_checkoutUrl?publicKey=$_publicKey&clientSecret=$clientSecret',
   );
 
   /// Step 3: Read the result when Paymob redirects back.
  
   PaymentResult? resultFromUrl(String url) {
-    if (!url.startsWith(_redirectionUrl)) return null;
+    if (!url.startsWith(redirectionUrl)) return null;
 
     final params = Uri.parse(url).queryParameters;
 
@@ -98,5 +101,27 @@ class PaymobService {
     }
 
     return PaymentResult(status: status, transactionId: params['id']);
+  }
+
+  /// All 3 steps together. [openCheckout] shows the payment page and returns
+  /// the URL Paymob redirected to, or null if the user closed the page.
+  Future<PaymentResult> pay({
+    required int amountCents,
+    required String itemName,
+    required BillingData billingData,
+    required Future<String?> Function(Uri checkoutUri) openCheckout,
+  }) async {
+    final intention = await createIntention(
+      amountCents: amountCents,
+      itemName: itemName,
+      billingData: billingData,
+    );
+    final uri = checkoutUri(intention.clientSecret);
+    final redirectUrl = await openCheckout(uri);
+    if (redirectUrl == null) {
+      return const PaymentResult(status: PaymentStatus.cancelled);
+    }
+    return resultFromUrl(redirectUrl) ??
+        const PaymentResult(status: PaymentStatus.failed);
   }
 }

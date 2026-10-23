@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:payment_with_paymob/features/payment/models/billing_data.dart';
-import 'package:payment_with_paymob/features/payment/models/payment_result.dart';
 import 'package:payment_with_paymob/features/payment/screens/paymob_webview_screen.dart';
 import 'package:payment_with_paymob/features/payment/services/paymob_exception.dart';
 import 'package:payment_with_paymob/features/payment/services/paymob_service.dart';
@@ -37,7 +36,7 @@ class _PaymobDemoScreenState extends State<PaymobDemoScreen> {
     FocusScope.of(context).unfocus();
     setState(() => _loading = true);
     try {
-      final intention = await _service.createIntention(
+      final result = await _service.pay(
         amountCents: amountCents,
         itemName: 'Flutter Course',
         billingData: const BillingData(
@@ -46,20 +45,16 @@ class _PaymobDemoScreenState extends State<PaymobDemoScreen> {
           email: 'ahmed@example.com',
           phoneNumber: '+201012345678',
         ),
-      );
-      if (!mounted) return;
-
-      final result =
-          await Navigator.push<PaymentResult>(
+        openCheckout: (uri) async {
+          if (!mounted) return null;
+          return Navigator.push<String>(
             context,
             MaterialPageRoute(
-              builder: (_) => PaymobWebViewScreen(
-                service: _service,
-                clientSecret: intention.clientSecret,
-              ),
+              builder: (_) => PaymobWebViewScreen(checkoutUri: uri),
             ),
-          ) ??
-          const PaymentResult(status: PaymentStatus.cancelled);
+          );
+        },
+      );
 
       _showMessage('${result.status.name} · ${result.transactionId ?? '-'}');
     } on PaymobException catch (e) {
